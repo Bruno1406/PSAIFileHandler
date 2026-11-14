@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from src.matlab import MATSweepConverter
+from psaifilehandler.matlab import MATSweepConverter
 
 
 def convert_potato_dataset(

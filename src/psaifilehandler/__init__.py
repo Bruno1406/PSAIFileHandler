@@ -1,0 +1,72 @@
+"""PSAIFileHandler: Standardized simulation and experimental data file handler."""
+
+from __future__ import annotations
+
+from .comsol import (
+    DEFAULT_FIELD_ALIASES,
+    DEFAULT_REGEX_RULES,
+    BaseComsolParser,
+    ComsolConverter,
+    ComsolExpressionHeader,
+    FieldAliasResolver,
+    FlatTextParser,
+    ParsedComsolGeometry,
+    ParsedComsolStep,
+    TransposedTextParser,
+    VTUParser,
+    get_parser_for_file,
+    is_file_transposed,
+    parse_expression_header,
+    parse_flat_header_line,
+)
+from .matlab import (
+    CellArray,
+    MATConverter,
+    MATFile,
+    MATStruct,
+    MATStructArray,
+    MATSweepConverter,
+    PathAccessor,
+    build_datatree,
+    build_structured_sweep_mapping,
+    compile_accessor,
+    dataframe_to_dataarray,
+    deserialize_matlab_value,
+    evaluate_accessor,
+    mat_to_netcdf4,
+)
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "DEFAULT_FIELD_ALIASES",
+    "DEFAULT_REGEX_RULES",
+    "BaseComsolParser",
+    "CellArray",
+    "ComsolConverter",
+    "ComsolExpressionHeader",
+    "FieldAliasResolver",
+    "FlatTextParser",
+    "MATConverter",
+    "MATFile",
+    "MATStruct",
+    "MATStructArray",
+    "MATSweepConverter",
+    "ParsedComsolGeometry",
+    "ParsedComsolStep",
+    "PathAccessor",
+    "TransposedTextParser",
+    "VTUParser",
+    "__version__",
+    "build_datatree",
+    "build_structured_sweep_mapping",
+    "compile_accessor",
+    "dataframe_to_dataarray",
+    "deserialize_matlab_value",
+    "evaluate_accessor",
+    "get_parser_for_file",
+    "is_file_transposed",
+    "mat_to_netcdf4",
+    "parse_expression_header",
+    "parse_flat_header_line",
+]

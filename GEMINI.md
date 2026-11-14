@@ -11,6 +11,16 @@ Whenever the user requests to implement something according to a specification (
   4. **Performance & Potential Pitfalls**: Bottlenecks, vectorized linear algebra, memory scaling, and I/O overhead.
 - Wait for user alignment or answers before writing implementation code.
 
+### Distinction: `specs/` vs. `docs/`
+- **`specs/` (Specifications — Authoritative Implementation Truth)**:
+  - Houses the rigorous, formal instructions required to design and implement a component or subsystem.
+  - Contains exact mathematical formulations, interface contracts, class hierarchies, algorithmic complexity, numerical edge cases, and acceptance testing criteria.
+  - Written for engineers and AI agents as the binding technical specification before writing code.
+- **`docs/` (Documentation — User-Friendly Guides & Manuals)**:
+  - Houses end-user manuals, practical developer guides, and conceptual explanations.
+  - Explains *how to use* the package with concrete examples, schema references, and recommended workflows.
+  - Avoids internal refactoring history, procedural migration steps, or implementation narratives (which belong exclusively in `specs/`).
+
 ---
 
 ## 2. Environment & Package Management
@@ -32,6 +42,9 @@ Whenever the user requests to implement something according to a specification (
 - **Type Annotations**:
   - Use modern typing conventions: `list[...]`, `dict[...]`, `tuple[...]`, `X | None`, and explicit collections from `typing` (`Sequence`, `Mapping`, `Iterable`, `Protocol`).
   - Use `np.ndarray` and PyVista types (`pv.UnstructuredGrid`, `pv.PolyData`) for mesh and field data.
+- **No Functions Defined in `__init__.py` Files**:
+  - `__init__.py` files must strictly serve as package namespace roots, exposing public APIs via `__all__` and re-exports.
+  - Never define functions, classes, or computational methods directly in `__init__.py` files. All implementations must reside in dedicated module files (e.g. `base.py`, `converter.py`, `accessors.py`).
 
 ---
 
@@ -41,6 +54,10 @@ Whenever the user requests to implement something according to a specification (
 - **Docstrings**:
   - Provide clear, concise docstrings for all public classes and functions.
   - State the purpose, parameter descriptions with physical units (e.g. RPM, m³/h, rad/s, K, s), and return values.
+- **Inline `#Comment` Review Workflow**:
+  - Whenever the user writes a comment starting with `#Comment` (or `# Comment`) and instructs the agent to revise/review a file or a group of files:
+  - The agent must address each question thoroughly in its response and/or code adjustments.
+  - The agent must delete the `#Comment` comments from the file(s) afterwards to keep the codebase clean.
 
 ---
 
@@ -138,25 +155,20 @@ Probes and localized physical point sensors are treated as a 1-point spatial geo
 ---
 
 ## 7. Documentation Standards for `docs/`
-After completing any implementation or architectural change, you **MUST** create or update a markdown document in `docs/` (e.g., `docs/<FEATURE_NAME>.md`). 
+After completing any feature implementation or architectural change, you **MUST** create or update a user-friendly markdown guide in `docs/` (e.g., `docs/<FEATURE_NAME>.md`). 
 
-Follow the structure established in `docs/3D_PUMP_MODELS.md`:
+The document should be focused on enabling developers and researchers to use the subsystem effortlessly:
 
-### Document Template
-1. **Title & Context**:
-   - `# <Feature / Subsystem Name> Documentation`
-   - Brief paragraph describing the purpose, scope, and target branch or integration context.
-2. **Executive Summary**:
-   - High-level numbered or bulleted list of all modified modules and functional areas.
-3. **Module Breakdown (Repeat for each affected module)**:
-   - **Header**: `## <Index>. <Module or Subsystem Name>`
-   - **Location**: `**Location:** [\`path/to/file.py\`]`
-   - **Mathematical & Physical Formulation**:
-     - Governing equations, physical formulas, unit conversions, or numerical schemes in LaTeX ($$...$$ or $...$).
-   - **Implementation Rationale & Architectural Decisions**:
-     - Explain the "why" behind design choices, fallback mechanisms, performance tradeoffs, and compatibility guarantees.
-   - **Core Reference Snippets**:
-     - Include concise, syntax-highlighted code blocks highlighting the primary algorithms.
-4. **Integration & Verification**:
-   - Explain how the new module connects with existing providers (e.g. `ComsolVTUSnapshotProvider`, `BoundaryProbe`).
-   - Provide concrete usage examples and test command/notebook references.
+### Guide Template
+1. **Title & Conceptual Overview**:
+   - `# <Feature / Subsystem Name> User Guide`
+   - High-level overview of purpose, supported physical domains, and key capabilities.
+2. **Quickstart & Common Workflows**:
+   - Minimal working examples showing how to ingest data and export to NetCDF-4.
+3. **Data Schemas & Configuration**:
+   - Comprehensive explanation of dictionary formats, schema parameters, and accessors.
+   - Hierarchy visualization mapping input fields to the NetCDF-4 tree structure.
+4. **Advanced Features & Edge Cases**:
+   - Dynamic evaluation, multi-domain decomposition, coordinate invariance, and probe extraction.
+5. **API & Reference Guide**:
+   - Concise reference for public classes, methods, and parameters.

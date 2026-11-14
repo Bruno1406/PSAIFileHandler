@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from src.matlab import MATConverter
+from psaifilehandler.matlab import MATConverter
 
 
 def convert_chicken_dataset(
