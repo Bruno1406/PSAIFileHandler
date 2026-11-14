@@ -33,6 +33,19 @@ DEFAULT_FIELD_ALIASES: dict[str, str] = {
     "alphat": "alphat",
 }
 
+DEFAULT_PARAMETER_ALIASES: dict[str, str] = {
+    # Flow rate and volumetric flux
+    "q_in": "volumetric_flow",
+    "flow_rate": "volumetric_flow",
+    "volumetric_flow": "volumetric_flow",
+    "q": "volumetric_flow",
+    # Rotational speed and RPM
+    "rot_rpm": "rotational_speed",
+    "rpm": "rotational_speed",
+    "rotational_speed": "rotational_speed",
+    "omega": "angular_velocity",
+}
+
 # 1. Velocity components: matches "Velocity_field,_x_component", "velocity x", "u_comp1", etc.
 # 2. Velocity magnitude: matches "Velocity_field", "Velocity magnitude", "|u|", "speed"
 # 3. Total traction: matches "Total_traction,_exterior_boundaries,_x_component", etc.
@@ -85,13 +98,27 @@ def normalize_alias_key(key: str) -> str:
 class FieldAliasResolver:
     """Manages canonical expression alias resolution with optional user overrides."""
 
-    def __init__(self, custom_aliases: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        custom_aliases: Mapping[str, str | list[str]] | None = None,
+    ) -> None:
         self.aliases: dict[str, str] = {
             normalize_alias_key(k): v for k, v in DEFAULT_FIELD_ALIASES.items()
         }
+        for k, v in DEFAULT_PARAMETER_ALIASES.items():
+            self.aliases[normalize_alias_key(k)] = v
+
+        self.custom_vector_aliases: dict[str, list[str]] = {}
+
         if custom_aliases:
             for k, v in custom_aliases.items():
-                self.aliases[normalize_alias_key(k)] = v
+                if isinstance(v, list):
+                    self.custom_vector_aliases[k] = [str(x) for x in v]
+                else:
+                    norm_k = normalize_alias_key(k)
+                    norm_v = normalize_alias_key(str(v))
+                    self.aliases[norm_k] = str(v)
+                    self.aliases[norm_v] = str(k)
 
     def resolve(self, expr_name: str) -> str:
         """Resolve expression name to its canonical identifier."""
@@ -120,14 +147,23 @@ class FieldAliasResolver:
         if pattern == expr_name:
             return True
 
+        norm_p = normalize_alias_key(pattern)
+        norm_e = normalize_alias_key(expr_name)
+        if norm_p == norm_e:
+            return True
+
         resolved_expr = self.resolve(expr_name)
         resolved_pattern = self.resolve(pattern)
         if resolved_expr == resolved_pattern:
             return True
 
+        if self.aliases.get(norm_p) == norm_e or self.aliases.get(norm_e) == norm_p:
+            return True
+
         try:
-            # Match full string against user regex pattern (case-insensitive)
-            rx = re.compile(f"^{pattern}$", re.IGNORECASE)
+            # Matches user pattern with glob wildcard or regex against expression or canonical name
+            regex_str = pattern.replace(".", r"\.").replace("*", ".*")
+            rx = re.compile(f"^{regex_str}$", re.IGNORECASE)
             if rx.match(expr_name) or rx.match(resolved_expr):
                 return True
         except re.error:

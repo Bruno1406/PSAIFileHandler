@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 
 import numpy as np
+import pandas as pd
 
 from ..header_parser import ComsolExpressionHeader, parse_flat_header_line
 from .base import BaseComsolParser, ParsedComsolGeometry, ParsedComsolStep
@@ -111,13 +112,17 @@ class FlatTextParser(BaseComsolParser):
         sorted_usecols = sorted(usecols_set)
         col_to_matrix_idx = {col: i for i, col in enumerate(sorted_usecols)}
 
-        data_matrix = np.loadtxt(
+        sep = delimiter if delimiter is not None else r"\s+"
+        df = pd.read_csv(
             self.file_path,
-            comments="%",
-            delimiter=delimiter,
+            comment="%",
+            sep=sep,
+            header=None,
             usecols=sorted_usecols,
             dtype=np.float64,
+            engine="c",
         )
+        data_matrix = df.to_numpy()
 
         if data_matrix.ndim == 1:
             data_matrix = data_matrix[np.newaxis, :]
@@ -178,3 +183,30 @@ class FlatTextParser(BaseComsolParser):
             field_units=field_units,
             param_units=param_units,
         )
+
+    def inspect(self) -> tuple[list[str], list[str], dict[str, float | str], dict[str, str]]:
+        """Inspect file header and return (coordinates, expressions, sample_parameters, param_units)."""
+        header_line = ""
+        with open(self.file_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith("%") and "@" in line:
+                    header_line = line
+                    break
+
+        if not header_line:
+            raise ValueError(f"No column header line found with '@' markers in {self.file_path.name}")
+
+        file_coords, expr_headers = parse_flat_header_line(header_line)
+        expressions: list[str] = []
+        seen: set[str] = set()
+        step_params: dict[str, float | str] = {}
+        param_units: dict[str, str] = {}
+
+        for h in expr_headers:
+            if h.expression not in seen:
+                seen.add(h.expression)
+                expressions.append(h.expression)
+            step_params.update(h.parameters)
+            param_units.update(h.param_units)
+
+        return file_coords, expressions, step_params, param_units

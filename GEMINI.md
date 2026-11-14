@@ -27,6 +27,8 @@ Whenever the user requests to implement something according to a specification (
 - **`uv` is the Mandatory Package Manager**:
   - Always use `uv` for managing dependencies, virtual environments, and running tools (e.g., `uv add <package>`, `uv run <command>`, `uv pip install`).
   - Do not invoke raw `pip` directly unless explicitly requested by the user.
+- **Mandatory Rebuild on Main**:
+  - Whenever a commit is made on `main`, immediately rebuild the project distribution artifacts using `uv build` to ensure `dist/` wheels and source archives stay in sync with the codebase.
 
 ---
 

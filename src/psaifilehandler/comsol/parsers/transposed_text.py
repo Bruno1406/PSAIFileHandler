@@ -143,3 +143,33 @@ class TransposedTextParser(BaseComsolParser):
             field_units=field_units,
             param_units=param_units,
         )
+
+    def inspect(self) -> tuple[list[str], list[str], dict[str, float | str], dict[str, str]]:
+        """Inspect file header and return (coordinates, expressions, sample_parameters, param_units)."""
+        coords: list[str] = []
+        expressions: list[str] = []
+        seen: set[str] = set()
+        step_params: dict[str, float | str] = {}
+        param_units: dict[str, str] = {}
+
+        with open(self.file_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if not line.startswith("%"):
+                    continue
+                clean = line.strip().lstrip("%").strip()
+                lower = clean.lower()
+                if lower in ("x", "y", "z") and "@" not in clean:
+                    if lower not in coords:
+                        coords.append(lower)
+                    continue
+                if "@" in clean:
+                    h = parse_expression_header(clean)
+                    if seen and h.step_index > 1:
+                        break
+                    if h.expression not in seen:
+                        seen.add(h.expression)
+                        expressions.append(h.expression)
+                    step_params.update(h.parameters)
+                    param_units.update(h.param_units)
+
+        return coords, expressions, step_params, param_units

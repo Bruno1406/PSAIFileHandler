@@ -57,6 +57,11 @@ class BaseComsolParser(ABC):
         """Parse the geometry file and extract coordinates and matched variables."""
         ...
 
+    @abstractmethod
+    def inspect(self) -> tuple[list[str], list[str], dict[str, float | str], dict[str, str]]:
+        """Inspect file header and return (coordinates, expressions, sample_parameters, param_units)."""
+        ...
+
 
 def is_file_transposed(file_path: str | Path) -> bool:
     """Detect if a text or CSV export is in transposed format by inspecting header lines."""

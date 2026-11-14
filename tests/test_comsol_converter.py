@@ -134,6 +134,11 @@ def test_comsol_format_parity_mrf() -> None:
 def test_comsol_transient_netcdf_roundtrip(tmp_path: Path) -> None:
     """Test transient ingestion, NetCDF-4 export, and xarray.open_datatree re-import."""
     schema = {
+        "title": "Transient 2D Pump Study",
+        "source": "COMSOL Multiphysics 6.0",
+        "attr": {
+            "institution": "TU Darmstadt",
+        },
         "variables": {
             "Inlet Flow": "Q_in",
             "Speed": "rot_rpm",
@@ -159,6 +164,9 @@ def test_comsol_transient_netcdf_roundtrip(tmp_path: Path) -> None:
 
     # Read back with h5netcdf
     tree = xr.open_datatree(out_file, engine="h5netcdf")
+    assert tree.attrs["title"] == "Transient 2D Pump Study"
+    assert tree.attrs["source"] == "COMSOL Multiphysics 6.0"
+    assert tree.attrs["institution"] == "TU Darmstadt"
     run_key = next(iter(tree.children.keys()))
 
     run_ds = tree[run_key].to_dataset()
@@ -174,3 +182,108 @@ def test_comsol_transient_netcdf_roundtrip(tmp_path: Path) -> None:
     assert list(static_ds.spatial.values) == ["x", "y"]
     assert static_ds.pressure.attrs.get("units") == "Pa"
     assert static_ds.velocity.attrs.get("units") == "m/s"
+
+
+def test_comsol_converter_geometry_length_validation() -> None:
+    """Test that geometry list length must match file list length."""
+    import pytest
+
+    converter = ComsolConverter(geometries=["volute", "impeller"])
+    with pytest.raises(ValueError, match="Length of geometries"):
+        converter.to_datatree(["data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"])
+
+
+def test_comsol_converter_autodiscovery_defaults() -> None:
+    """Test schema auto-discovery with default arguments (empty variables/geometries/parameters)."""
+    inlet_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"
+    converter = ComsolConverter(title="Autodiscovered Dataset")
+
+    tree = converter.to_datatree(inlet_path)
+    assert tree.attrs["title"] == "Autodiscovered Dataset"
+
+    run_key = next(iter(tree.children.keys()))
+    run_ds = tree[run_key].to_dataset()
+
+    # In steady-state, no time dimension should be auto-created
+    assert "time" not in run_ds.coords
+
+    # Top-level parameters should be auto-extracted
+    assert "Q_in" in run_ds or "volumetric_flow" in run_ds
+    assert "rot_rpm" in run_ds or "rotational_speed" in run_ds
+
+    # Geometry group defaults to "geometry_1"
+    assert "geometry_1" in tree[run_key].children
+    geom_ds = tree[f"{run_key}/geometry_1"].to_dataset()
+
+    # Velocity vector and pressure alias should be discovered
+    assert "velocity" in geom_ds
+    assert geom_ds.velocity.ndim == 2  # (node, spatial)
+    assert "pressure" in geom_ds
+    assert geom_ds.pressure.ndim == 1  # (node,)
+
+
+def test_comsol_converter_parameters_and_custom_aliases() -> None:
+    """Test custom aliases, parameter mapping, and selective variable filtering."""
+    inlet_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"
+    converter = ComsolConverter(
+        geometries=["inlet"],
+        variables=["pressure"],
+        parameters=["flow", "rpm"],
+        custom_aliases={"flow": "Q_in", "rpm": "rot_rpm"},
+    )
+    tree = converter.to_datatree([inlet_path])
+
+    run_key = next(iter(tree.children.keys()))
+    run_ds = tree[run_key].to_dataset()
+
+    assert "flow" in run_ds
+    assert "rpm" in run_ds
+    assert "inlet" in tree[run_key].children
+
+    inlet_ds = tree[f"{run_key}/inlet"].to_dataset()
+    assert "pressure" in inlet_ds
+    assert "velocity" not in inlet_ds  # filtered out by variables=["pressure"]
+
+
+def test_comsol_converter_schema_priority() -> None:
+    """Test that explicit data_schema has strict priority over shorthand arguments."""
+    schema = {
+        "title": "Strict Schema Priority",
+        "variables": {"manual_flow": "Q_in"},
+        "custom_domain": {
+            "coordinates": ["x", "y"],
+            "variables": {"p_scalar": "p"},
+        },
+    }
+    converter = ComsolConverter(
+        data_schema=schema,
+        geometries=["ignored_geom"],
+        variables=["ignored_var"],
+        parameters=["ignored_param"],
+    )
+    tree = converter.to_datatree(
+        {"custom_domain": "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"}
+    )
+
+    assert tree.attrs["title"] == "Strict Schema Priority"
+    run_key = next(iter(tree.children.keys()))
+    run_ds = tree[run_key].to_dataset()
+
+    assert "manual_flow" in run_ds
+    assert "ignored_param" not in run_ds
+    assert "custom_domain" in tree[run_key].children
+    assert "ignored_geom" not in tree[run_key].children
+
+
+def test_comsol_converter_autodiscovery_roundtrip(tmp_path: Path) -> None:
+    """Test NetCDF-4 export and re-import of autodiscovered dataset."""
+    demo_path = "data/comsol/Pump2D_TRN_Static_every5th_Transpose_only3stepsForDemo.csv"
+    converter = ComsolConverter(geometries=["static_demo"])
+    out_file = tmp_path / "autodiscovered_demo.nc"
+
+    nc_path = converter.to_netcdf4([demo_path], out_file)
+    assert nc_path.exists()
+
+    tree = xr.open_datatree(nc_path, engine="h5netcdf")
+    run_key = next(iter(tree.children.keys()))
+    assert "static_demo" in tree[run_key].children

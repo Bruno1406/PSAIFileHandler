@@ -31,6 +31,7 @@ dependencies = [
     "numpy>=2.0.0",
     "pandas>=2.2.0",
     "pyvista>=0.44.0",
+    "tqdm>=4.66.0",
     "xarray>=2024.7.0",
 ]
 

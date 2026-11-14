@@ -127,3 +127,31 @@ class VTUParser(BaseComsolParser):
             field_units=field_units,
             param_units=param_units,
         )
+
+    def inspect(self) -> tuple[list[str], list[str], dict[str, float | str], dict[str, str]]:
+        """Inspect file header and return (coordinates, expressions, sample_parameters, param_units)."""
+        mesh = pv.read(self.file_path)
+        if not isinstance(mesh, (pv.UnstructuredGrid, pv.PolyData, pv.PointSet)):
+            raise TypeError(f"Expected PyVista grid/polydata, got {type(mesh).__name__}")
+
+        if mesh.points.shape[1] >= 3 and np.allclose(mesh.points[:, 2], 0.0):
+            coords = ["x", "y"]
+        else:
+            coords = ["x", "y", "z"][: mesh.points.shape[1]]
+
+        expressions: list[str] = []
+        seen: set[str] = set()
+        step_params: dict[str, float | str] = {}
+        param_units: dict[str, str] = {}
+
+        for array_key in mesh.point_data:
+            if "@" not in array_key:
+                continue
+            h = parse_expression_header(array_key)
+            if h.expression not in seen:
+                seen.add(h.expression)
+                expressions.append(h.expression)
+            step_params.update(h.parameters)
+            param_units.update(h.param_units)
+
+        return coords, expressions, step_params, param_units
