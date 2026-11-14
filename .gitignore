@@ -219,5 +219,7 @@ __marimo__/
 
 # Generated test artifacts
 *.nc
-!data/**/*.nc
 metadata/
+
+# Raw simulation and experimental datasets
+data/
