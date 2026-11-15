@@ -194,7 +194,7 @@ def test_comsol_converter_geometry_length_validation() -> None:
 
 
 def test_comsol_converter_autodiscovery_defaults() -> None:
-    """Test schema auto-discovery with default arguments (empty variables/geometries/parameters)."""
+    """Test schema auto-discovery with default arguments (Option A: pure literal 1D scalars)."""
     inlet_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"
     converter = ComsolConverter(title="Autodiscovered Dataset")
 
@@ -207,29 +207,27 @@ def test_comsol_converter_autodiscovery_defaults() -> None:
     # In steady-state, no time dimension should be auto-created
     assert "time" not in run_ds.coords
 
-    # Top-level parameters should be auto-extracted
-    assert "Q_in" in run_ds or "volumetric_flow" in run_ds
-    assert "rot_rpm" in run_ds or "rotational_speed" in run_ds
+    # Top-level parameters should be auto-extracted with exact raw header names
+    assert "Q_in" in run_ds
+    assert "rot_rpm" in run_ds
 
     # Geometry group defaults to "geometry_1"
     assert "geometry_1" in tree[run_key].children
     geom_ds = tree[f"{run_key}/geometry_1"].to_dataset()
 
-    # Velocity vector and pressure alias should be discovered
-    assert "velocity" in geom_ds
-    assert geom_ds.velocity.ndim == 2  # (node, spatial)
-    assert "pressure" in geom_ds
-    assert geom_ds.pressure.ndim == 1  # (node,)
+    # When variables is empty, all fields are kept as 1D scalars with raw names
+    assert "u" in geom_ds and geom_ds["u"].ndim == 1
+    assert "v" in geom_ds and geom_ds["v"].ndim == 1
+    assert "p" in geom_ds and geom_ds["p"].ndim == 1
 
 
-def test_comsol_converter_parameters_and_custom_aliases() -> None:
-    """Test custom aliases, parameter mapping, and selective variable filtering."""
+def test_comsol_converter_parameters_and_variables_mini_schema() -> None:
+    """Test variables mini-schema, parameter mapping, and unmentioned literal fields."""
     inlet_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"
     converter = ComsolConverter(
         geometries=["inlet"],
-        variables=["pressure"],
-        parameters=["flow", "rpm"],
-        custom_aliases={"flow": "Q_in", "rpm": "rot_rpm"},
+        variables={"velocity": ["u", "v"]},
+        parameters={"flow": "Q_in", "rpm": "rot_rpm"},
     )
     tree = converter.to_datatree([inlet_path])
 
@@ -241,16 +239,21 @@ def test_comsol_converter_parameters_and_custom_aliases() -> None:
     assert "inlet" in tree[run_key].children
 
     inlet_ds = tree[f"{run_key}/inlet"].to_dataset()
-    assert "pressure" in inlet_ds
-    assert "velocity" not in inlet_ds  # filtered out by variables=["pressure"]
+    assert "velocity" in inlet_ds
+    assert inlet_ds.velocity.ndim == 2
+    assert inlet_ds.velocity.dims == ("node", "spatial")
+    # 'p' was not mentioned in variables, so it is kept as raw 1D scalar 'p'
+    assert "p" in inlet_ds
+    assert inlet_ds["p"].ndim == 1
 
 
-def test_comsol_converter_custom_vector_aliases() -> None:
-    """Test custom vector aliases grouping components into a 2D variable (node, spatial)."""
+def test_comsol_converter_custom_vector_variables() -> None:
+    """Test custom vector variables in mini-schema grouping components into a 2D variable (node, spatial)."""
     blades_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Blades.txt"
     converter = ComsolConverter(
         geometries=["blades"],
-        custom_aliases={
+        variables={
+            "velocity": ["u", "v"],
             "total_traction": ["spf.T_stressx", "spf.T_stressy"],
             "rotation angle": "rot1.alpha",
         },
@@ -259,25 +262,33 @@ def test_comsol_converter_custom_vector_aliases() -> None:
     run_key = next(iter(tree.children.keys()))
     blades_ds = tree[f"{run_key}/blades"].to_dataset()
 
+    assert "velocity" in blades_ds
+    assert blades_ds["velocity"].dims == ("node", "spatial")
+
     assert "total_traction" in blades_ds
     assert blades_ds["total_traction"].dims == ("node", "spatial")
     assert blades_ds["total_traction"].shape[1] == 2
     assert "spf.T_stressx" not in blades_ds
     assert "spf.T_stressy" not in blades_ds
     assert "rotation angle" in blades_ds
+    # Unmentioned 'p' and 'w' are preserved as 1D scalars
+    assert "p" in blades_ds and blades_ds["p"].ndim == 1
+    assert "w" in blades_ds and blades_ds["w"].ndim == 1
 
-    converter_tuple = ComsolConverter(
-        geometries=["blades"],
-        custom_aliases={
-            ("spf.T_stressx", "spf.T_stressy"): "total traction",
-        },
+
+def test_comsol_converter_alias_bridge_for_variables() -> None:
+    """Test custom_aliases acting as a vocabulary bridge for variables mini-schema."""
+    inlet_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"
+    converter = ComsolConverter(
+        geometries=["inlet"],
+        custom_aliases={"custom_u_var": "u", "custom_v_var": "v"},
+        variables={"velocity": ["custom_u_var", "custom_v_var"]},
     )
-    tree_tuple = converter_tuple.to_datatree([blades_path])
-    run_key_tuple = next(iter(tree_tuple.children.keys()))
-    blades_tuple_ds = tree_tuple[f"{run_key_tuple}/blades"].to_dataset()
-    assert "total traction" in blades_tuple_ds
-    assert blades_tuple_ds["total traction"].dims == ("node", "spatial")
-    assert blades_tuple_ds["total traction"].shape[1] == 2
+    tree = converter.to_datatree([inlet_path])
+    run_key = next(iter(tree.children.keys()))
+    inlet_ds = tree[f"{run_key}/inlet"].to_dataset()
+    assert "velocity" in inlet_ds
+    assert inlet_ds["velocity"].dims == ("node", "spatial")
 
 
 def test_comsol_converter_schema_priority() -> None:

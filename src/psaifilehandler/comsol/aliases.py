@@ -100,7 +100,7 @@ class FieldAliasResolver:
 
     def __init__(
         self,
-        custom_aliases: Mapping[str, str | list[str]] | None = None,
+        custom_aliases: Mapping[str, str] | None = None,
     ) -> None:
         self.aliases: dict[str, str] = {
             normalize_alias_key(k): v for k, v in DEFAULT_FIELD_ALIASES.items()
@@ -108,18 +108,12 @@ class FieldAliasResolver:
         for k, v in DEFAULT_PARAMETER_ALIASES.items():
             self.aliases[normalize_alias_key(k)] = v
 
-        self.custom_vector_aliases: dict[str, list[str]] = {}
-
         if custom_aliases:
             for k, v in custom_aliases.items():
-                if isinstance(k, tuple):
-                    self.custom_vector_aliases[str(v)] = [str(x) for x in k]
-                elif isinstance(v, (list, tuple)):
-                    self.custom_vector_aliases[str(k)] = [str(x) for x in v]
-                else:
-                    norm_k = normalize_alias_key(k)
-                    norm_v = normalize_alias_key(str(v))
-                    self.aliases[norm_k] = str(v)
+                if isinstance(v, str):
+                    norm_k = normalize_alias_key(str(k))
+                    norm_v = normalize_alias_key(v)
+                    self.aliases[norm_k] = v
                     self.aliases[norm_v] = str(k)
 
     def resolve(self, expr_name: str) -> str:

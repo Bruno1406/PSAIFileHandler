@@ -38,24 +38,24 @@ class ComsolConverter:
 
     def __init__(
         self,
-        data_schema: dict[str, Any] | None = None,
-        variables: list[str] | None = None,
-        geometries: list[str] | None = None,
-        parameters: list[str] | None = None,
+        data_schema: Mapping[str, Any] | None = None,
+        variables: Mapping[str, str | list[str]] | Sequence[str] | None = None,
+        geometries: Sequence[str] | None = None,
+        parameters: Mapping[str, str] | Sequence[str] | None = None,
         time_param: str | None = None,
         title: str | None = None,
         source: str | None = None,
         attributes: Mapping[str, Any] | None = None,
         attrs: Mapping[str, Any] | None = None,
         exp_naming: str | Callable[[dict[str, Any], int], str] | None = "run_{step:03d}",
-        custom_aliases: Mapping[str, str | list[str]] | None = None,
+        custom_aliases: Mapping[str, str] | None = None,
     ) -> None:
         self.data_schema = dict(data_schema) if data_schema else {}
         self.exp_naming = exp_naming
         self.alias_resolver = FieldAliasResolver(custom_aliases=custom_aliases)
-        self.variables = list(variables) if variables else None
+        self.variables = dict(variables) if isinstance(variables, Mapping) else (list(variables) if variables else None)
         self.geometries = list(geometries) if geometries else None
-        self.parameters = list(parameters) if parameters else None
+        self.parameters = dict(parameters) if isinstance(parameters, Mapping) else (list(parameters) if parameters else None)
         self.time_param = self.data_schema.get("time", time_param)
         self.title = title
         self.source = source
@@ -168,48 +168,43 @@ class ComsolConverter:
                 geom_vars: dict[str, str | list[str]] = {}
                 consumed: set[str] = set()
 
-                for v_name, v_comps in self.alias_resolver.custom_vector_aliases.items():
-                    matched_comps = []
-                    for c_req in v_comps:
-                        found_c = next((e for e in expressions if self.alias_resolver.matches(c_req, e)), None)
-                        if found_c is not None:
-                            matched_comps.append(found_c)
-                    if len(matched_comps) == len(v_comps):
-                        geom_vars[v_name] = matched_comps
-                        consumed.update(matched_comps)
-
-                spatial_count = len(f_coords)
-                vel_candidates = [
-                    ["u", "v", "w"][:spatial_count],
-                    ["vx", "vy", "vz"][:spatial_count],
-                    ["ux", "uy", "uz"][:spatial_count],
-                ]
-                for cand in vel_candidates:
-                    if all(c in expressions for c in cand) and not any(c in consumed for c in cand):
-                        geom_vars["velocity"] = cand
-                        consumed.update(cand)
-                        break
+                if self.variables:
+                    if isinstance(self.variables, Mapping):
+                        for v_name, spec in self.variables.items():
+                            if isinstance(spec, (list, tuple)):
+                                matched_comps = []
+                                for c_req in spec:
+                                    found_c = next(
+                                        (e for e in expressions if self.alias_resolver.matches(c_req, e) and e not in consumed),
+                                        None,
+                                    )
+                                    if found_c is not None:
+                                        matched_comps.append(found_c)
+                                if len(matched_comps) == len(spec):
+                                    geom_vars[v_name] = matched_comps
+                                    consumed.update(matched_comps)
+                            else:
+                                found_e = next(
+                                    (e for e in expressions if self.alias_resolver.matches(str(spec), e) and e not in consumed),
+                                    None,
+                                )
+                                if found_e is not None:
+                                    geom_vars[v_name] = found_e
+                                    consumed.add(found_e)
+                    elif isinstance(self.variables, (list, tuple, set)):
+                        for v_req in self.variables:
+                            found_e = next(
+                                (e for e in expressions if self.alias_resolver.matches(v_req, e) and e not in consumed),
+                                None,
+                            )
+                            if found_e is not None:
+                                geom_vars[v_req] = found_e
+                                consumed.add(found_e)
 
                 for expr in expressions:
                     if expr in consumed:
                         continue
-                    canon = self.alias_resolver.resolve(expr)
-                    target_name = canon if canon != expr else expr
-                    geom_vars[target_name] = expr
-
-                if self.variables:
-                    filtered_vars: dict[str, str | list[str]] = {}
-                    for v_req in self.variables:
-                        matched = False
-                        for t_name, spec in geom_vars.items():
-                            if self.alias_resolver.matches(v_req, t_name) or (
-                                isinstance(spec, str) and self.alias_resolver.matches(v_req, spec)
-                            ):
-                                filtered_vars[t_name] = spec
-                                matched = True
-                        if not matched and v_req in geom_vars:
-                            filtered_vars[v_req] = geom_vars[v_req]
-                    geom_vars = filtered_vars
+                    geom_vars[expr] = expr
 
                 self.geometry_schemas[geom_name] = {
                     "coordinates": f_coords,
@@ -218,21 +213,28 @@ class ComsolConverter:
 
                 if not self.top_vars:
                     if self.parameters:
-                        for p_req in self.parameters:
-                            matched = False
-                            for p_key in step_params:
-                                if self.alias_resolver.matches(p_req, p_key):
-                                    self.top_vars[p_req] = p_key
-                                    matched = True
-                                    break
-                            if not matched and p_req in step_params:
-                                self.top_vars[p_req] = p_req
-                    else:
-                        for p_key in step_params:
-                            if self.time_param and p_key == self.time_param:
-                                continue
-                            canon_p = self.alias_resolver.resolve(p_key)
-                            self.top_vars[canon_p] = p_key
+                        if isinstance(self.parameters, Mapping):
+                            for p_name, p_spec in self.parameters.items():
+                                found_p = next(
+                                    (pk for pk in step_params if self.alias_resolver.matches(p_spec, pk)),
+                                    None,
+                                )
+                                if found_p is not None:
+                                    self.top_vars[p_name] = found_p
+                        elif isinstance(self.parameters, (list, tuple, set)):
+                            for p_req in self.parameters:
+                                found_p = next(
+                                    (pk for pk in step_params if self.alias_resolver.matches(p_req, pk)),
+                                    None,
+                                )
+                                if found_p is not None:
+                                    self.top_vars[p_req] = found_p
+
+                    for pk in step_params:
+                        if self.time_param and pk == self.time_param:
+                            continue
+                        if pk not in self.top_vars.values():
+                            self.top_vars[pk] = pk
 
         parsed_geometries: dict[str, ParsedComsolGeometry] = {}
         for geom_name, f_path in tqdm(

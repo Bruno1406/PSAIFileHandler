@@ -276,47 +276,63 @@ The built-in fast-path dictionary maps standard expressions to clean canonical n
 | `t_tracx`, `t_tracy`, `t_tracz` | `t_trac{x,y,z}` | Total traction components [N/m²] |
 | `alphat`, `rotation_angle` | `alphat` | Impeller rotation angle [rad] |
 
-> [!NOTE]
-> During auto-discovery, if `u` and `v` (or `vx`, `vy`) are detected, they are automatically assembled into a stacked vector variable named `velocity` with shape `(node, spatial)`.
+### 4.1. The `variables` Mini-Schema (Spatial Fields & Vectors)
+When `data_schema` is omitted, the `variables` argument acts as a geometry-agnostic mini-schema defining tensor structures and scalar field targets across all subdomains:
 
-### 4.2. Default Parameter Aliases
-Simulation parameters in COMSOL step headers (e.g. `Q_in=0.1 m^3/h, rot_rpm=1000 rpm`) are mapped to clean experiment-level variables:
+```python
+variables = {
+    # 2D/3D Vector fields: components are stacked into shape (node, spatial)
+    "velocity": ["u", "v"],
+    "total_traction": ["spf.T_stressx", "spf.T_stressy"],
+    # Renamed scalar fields
+    "rotation_angle": "rot1.alpha",
+}
+```
 
-| Raw Parameter in Header | Canonical Parameter Alias | Target Attribute / Signal |
-| :--- | :--- | :--- |
-| `Q_in`, `q_in`, `flow_rate`, `q` | `volumetric_flow` | Inlet volumetric flow rate |
-| `rot_rpm`, `rpm`, `rotational_speed` | `rotational_speed` | Rotor angular velocity [RPM] |
-| `omega` | `angular_velocity` | Angular velocity [rad/s] |
+- **Automatic Multi-Domain Handling**: If a variable or vector (e.g. `total_traction`) is only present in one subdomain file (e.g. `blades`) and absent in others (`inlet`, `outlet`), the converter extracts it for `blades` and silently skips it for the other geometries without raising an error.
+- **Raw Literal Preservation for Unmentioned Fields**: Any expression present in a COMSOL file that is **not** claimed by `variables` is automatically extracted as an individual 1D scalar using its exact raw name (e.g. `p (node)`).
+- **Default (No variables passed)**: If `variables=None`, every field is extracted as an individual 1D scalar using its raw expression name.
 
-### 4.3. Unrecognized Fields: Raw Name Preservation
-If an expression or parameter is **not** present in the default alias tables and no custom alias was supplied:
-- **No unprompted guessing**: The converter never invents names for unknown variables.
-- **Exact raw name preservation**: The field is stored in the NetCDF file using the exact cleaned expression string as found in the COMSOL file (e.g. `spf.T_stressx`, `spf.T_stressy`, `rot1.alpha`).
+### 4.2. The `parameters` Argument (Sweep Parameters)
+Top-level non-spatial simulation sweep parameters (e.g. `Q_in`, `rot_rpm`) can be renamed cleanly via `parameters`:
 
-### 4.4. Custom Aliases & Renaming Effect in NetCDF-4
-Passing `custom_aliases` directly changes the variable names written to the final NetCDF file. You can define aliases for scalar fields, vector component groupings, or top-level sweep parameters:
+```python
+parameters = {
+    "Volumetric Flow": "Q_in",
+    "Rotational Speed": "rot_rpm",
+}
+```
+Any sweep parameter not mentioned in `parameters` is automatically stored at the experiment level with its exact raw header name.
+
+### 4.3. `custom_aliases` as a Vocabulary Bridge
+The `custom_aliases` dictionary serves strictly as a **1-to-1 synonym bridge** between raw solver column headers and the identifiers declared in `variables` or `parameters`:
 
 ```python
 converter = ComsolConverter(
     geometries=["pump", "blades"],
     custom_aliases={
-        # Parameter aliases: in NetCDF, variable is named 'flow' instead of 'Q_in'
+        # Solver-specific raw headers mapped to standard identifiers
+        "Comp1.u_x": "u",
+        "Comp1.u_y": "v",
+    },
+    variables={
+        # Variables mini-schema looks for 'u' and 'v', bridged by custom_aliases
+        "velocity": ["u", "v"],
+        "total_traction": ["spf.T_stressx", "spf.T_stressy"],
+    },
+    parameters={
         "flow": "Q_in",
         "rpm": "rot_rpm",
-        # Custom vector grouping: stacks two raw stress components into a vector 'traction'
-        "traction": ["spf.T_stressx", "spf.T_stressy"],
-        # Custom scalar alias: renames 'rot1.alpha' to 'angle'
-        "angle": "rot1.alpha",
     },
 )
 ```
 
 In the resulting NetCDF-4 file:
-- `/{run_name}/flow` contains the driving flow values.
+- `/{run_name}/flow` contains the driving flow rate.
 - `/{run_name}/rpm` contains the rotor speed.
-- `/{run_name}/blades/traction` is a vector array with shape `(node, spatial)` storing `[spf.T_stressx, spf.T_stressy]`.
-- `/{run_name}/blades/angle` stores the rotation angle.
-- Unaliased fields (`pressure`, `velocity`) continue using their canonical aliases.
+- `/{run_name}/blades/velocity` is a 2D vector `(node, spatial)` assembled from `[Comp1.u_x, Comp1.u_y]`.
+- `/{run_name}/blades/total_traction` is a 2D vector `(node, spatial)` assembled from `[spf.T_stressx, spf.T_stressy]`.
+- Unmentioned fields (e.g. `p`, `w`) remain available as 1D scalar arrays with their exact raw names.
 
 ---
 
