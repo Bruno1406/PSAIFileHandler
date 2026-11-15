@@ -49,6 +49,7 @@ class ComsolConverter:
         attrs: Mapping[str, Any] | None = None,
         exp_naming: str | Callable[[dict[str, Any], int], str] | None = "run_{step:03d}",
         custom_aliases: Mapping[str, str] | None = None,
+        excluded_variables: Sequence[str] | None = None,
     ) -> None:
         self.data_schema = dict(data_schema) if data_schema else {}
         self.exp_naming = exp_naming
@@ -56,6 +57,9 @@ class ComsolConverter:
         self.variables = dict(variables) if isinstance(variables, Mapping) else (list(variables) if variables else None)
         self.geometries = list(geometries) if geometries else None
         self.parameters = dict(parameters) if isinstance(parameters, Mapping) else (list(parameters) if parameters else None)
+        self.excluded_variables: set[str] = (
+            {str(x).strip() for x in excluded_variables} if excluded_variables else set()
+        )
         self.time_param = self.data_schema.get("time", time_param)
         self.title = title
         self.source = source
@@ -153,6 +157,7 @@ class ComsolConverter:
             raise TypeError(f"Invalid files type: {type(files).__name__}")
 
         if self.is_auto_schema:
+            excluded_lower = {x.lower() for x in self.excluded_variables}
             for geom_name, f_path in file_map.items():
                 transposed_flag = (
                     transposed.get(geom_name)
@@ -165,6 +170,11 @@ class ComsolConverter:
                     alias_resolver=self.alias_resolver,
                 )
                 f_coords, expressions, step_params, _ = parser.inspect()
+                if self.excluded_variables:
+                    expressions = [
+                        e for e in expressions
+                        if e.strip() not in self.excluded_variables and e.strip().lower() not in excluded_lower
+                    ]
                 geom_vars: dict[str, str | list[str]] = {}
                 consumed: set[str] = set()
 

@@ -332,7 +332,24 @@ In the resulting NetCDF-4 file:
 - `/{run_name}/rpm` contains the rotor speed.
 - `/{run_name}/blades/velocity` is a 2D vector `(node, spatial)` assembled from `[Comp1.u_x, Comp1.u_y]`.
 - `/{run_name}/blades/total_traction` is a 2D vector `(node, spatial)` assembled from `[spf.T_stressx, spf.T_stressy]`.
-- Unmentioned fields (e.g. `p`, `w`) remain available as 1D scalar arrays with their exact raw names.
+- Unmentioned fields (e.g. `p`) remain available as 1D scalar arrays with their exact raw names.
+
+### 4.4. The `excluded_variables` Parameter
+When `data_schema` is omitted, all variables present in the COMSOL file are captured by default. If specific raw fields should be completely discarded (e.g. out-of-plane velocity `w` in a 2D planar simulation), you can pass their exact raw names to `excluded_variables`:
+
+```python
+converter = ComsolConverter(
+    geometries=["pump", "blades"],
+    variables={
+        "velocity": ["u", "v"],
+    },
+    excluded_variables=["w"],  # Strictly excludes 'w', no alias matching
+)
+```
+
+- **Exact Raw Match**: Does not use alias resolution; matches directly against the raw expression string from the file.
+- **Strictly Ignored**: Excluded variables are neither matched into `variables` nor emitted as loose 1D scalars.
+- **Ignored when `data_schema` is supplied**: When an explicit `data_schema` is set, `excluded_variables` is disregarded since `data_schema` already acts as an exclusive whitelist.
 
 ---
 

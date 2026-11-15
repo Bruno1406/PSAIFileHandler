@@ -291,6 +291,24 @@ def test_comsol_converter_alias_bridge_for_variables() -> None:
     assert inlet_ds["velocity"].dims == ("node", "spatial")
 
 
+def test_comsol_converter_excluded_variables() -> None:
+    """Test excluded_variables filters out specific raw variables without alias matching."""
+    inlet_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"
+    converter = ComsolConverter(
+        geometries=["inlet"],
+        excluded_variables=["w"],
+    )
+    tree = converter.to_datatree([inlet_path])
+    run_key = next(iter(tree.children.keys()))
+    inlet_ds = tree[f"{run_key}/inlet"].to_dataset()
+
+    assert "u" in inlet_ds
+    assert "v" in inlet_ds
+    assert "p" in inlet_ds
+    # 'w' must be strictly excluded
+    assert "w" not in inlet_ds
+
+
 def test_comsol_converter_schema_priority() -> None:
     """Test that explicit data_schema has strict priority over shorthand arguments."""
     schema = {
