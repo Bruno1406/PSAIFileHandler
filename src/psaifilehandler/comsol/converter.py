@@ -169,9 +169,14 @@ class ComsolConverter:
                 consumed: set[str] = set()
 
                 for v_name, v_comps in self.alias_resolver.custom_vector_aliases.items():
-                    if all(c in expressions for c in v_comps):
-                        geom_vars[v_name] = v_comps
-                        consumed.update(v_comps)
+                    matched_comps = []
+                    for c_req in v_comps:
+                        found_c = next((e for e in expressions if self.alias_resolver.matches(c_req, e)), None)
+                        if found_c is not None:
+                            matched_comps.append(found_c)
+                    if len(matched_comps) == len(v_comps):
+                        geom_vars[v_name] = matched_comps
+                        consumed.update(matched_comps)
 
                 spatial_count = len(f_coords)
                 vel_candidates = [

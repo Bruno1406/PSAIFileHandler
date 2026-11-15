@@ -112,8 +112,10 @@ class FieldAliasResolver:
 
         if custom_aliases:
             for k, v in custom_aliases.items():
-                if isinstance(v, list):
-                    self.custom_vector_aliases[k] = [str(x) for x in v]
+                if isinstance(k, tuple):
+                    self.custom_vector_aliases[str(v)] = [str(x) for x in k]
+                elif isinstance(v, (list, tuple)):
+                    self.custom_vector_aliases[str(k)] = [str(x) for x in v]
                 else:
                     norm_k = normalize_alias_key(k)
                     norm_v = normalize_alias_key(str(v))

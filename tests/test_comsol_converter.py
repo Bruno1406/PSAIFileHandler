@@ -245,6 +245,41 @@ def test_comsol_converter_parameters_and_custom_aliases() -> None:
     assert "velocity" not in inlet_ds  # filtered out by variables=["pressure"]
 
 
+def test_comsol_converter_custom_vector_aliases() -> None:
+    """Test custom vector aliases grouping components into a 2D variable (node, spatial)."""
+    blades_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Blades.txt"
+    converter = ComsolConverter(
+        geometries=["blades"],
+        custom_aliases={
+            "total_traction": ["spf.T_stressx", "spf.T_stressy"],
+            "rotation angle": "rot1.alpha",
+        },
+    )
+    tree = converter.to_datatree([blades_path])
+    run_key = next(iter(tree.children.keys()))
+    blades_ds = tree[f"{run_key}/blades"].to_dataset()
+
+    assert "total_traction" in blades_ds
+    assert blades_ds["total_traction"].dims == ("node", "spatial")
+    assert blades_ds["total_traction"].shape[1] == 2
+    assert "spf.T_stressx" not in blades_ds
+    assert "spf.T_stressy" not in blades_ds
+    assert "rotation angle" in blades_ds
+
+    converter_tuple = ComsolConverter(
+        geometries=["blades"],
+        custom_aliases={
+            ("spf.T_stressx", "spf.T_stressy"): "total traction",
+        },
+    )
+    tree_tuple = converter_tuple.to_datatree([blades_path])
+    run_key_tuple = next(iter(tree_tuple.children.keys()))
+    blades_tuple_ds = tree_tuple[f"{run_key_tuple}/blades"].to_dataset()
+    assert "total traction" in blades_tuple_ds
+    assert blades_tuple_ds["total traction"].dims == ("node", "spatial")
+    assert blades_tuple_ds["total traction"].shape[1] == 2
+
+
 def test_comsol_converter_schema_priority() -> None:
     """Test that explicit data_schema has strict priority over shorthand arguments."""
     schema = {
