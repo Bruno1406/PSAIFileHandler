@@ -260,12 +260,14 @@ def test_comsol_converter_schema_priority() -> None:
         geometries=["ignored_geom"],
         variables=["ignored_var"],
         parameters=["ignored_param"],
+        attributes={"ignored_attr": "value"},
     )
     tree = converter.to_datatree(
         {"custom_domain": "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"}
     )
 
     assert tree.attrs["title"] == "Strict Schema Priority"
+    assert "ignored_attr" not in tree.attrs
     run_key = next(iter(tree.children.keys()))
     run_ds = tree[run_key].to_dataset()
 
@@ -273,6 +275,17 @@ def test_comsol_converter_schema_priority() -> None:
     assert "ignored_param" not in run_ds
     assert "custom_domain" in tree[run_key].children
     assert "ignored_geom" not in tree[run_key].children
+
+
+def test_comsol_converter_attributes_in_shorthand() -> None:
+    """Test that attributes dictionary sets root attributes when data_schema is not set."""
+    inlet_path = "data/comsol/Pump2D_MRFStudy_UltraFine_Inlet.txt"
+    converter = ComsolConverter(
+        attributes={"author": "Bruno", "institution": "TU Darmstadt"},
+    )
+    tree = converter.to_datatree(inlet_path)
+    assert tree.attrs["author"] == "Bruno"
+    assert tree.attrs["institution"] == "TU Darmstadt"
 
 
 def test_comsol_converter_autodiscovery_roundtrip(tmp_path: Path) -> None:

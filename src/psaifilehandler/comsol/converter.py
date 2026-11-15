@@ -45,6 +45,7 @@ class ComsolConverter:
         time_param: str | None = None,
         title: str | None = None,
         source: str | None = None,
+        attributes: Mapping[str, Any] | None = None,
         attrs: Mapping[str, Any] | None = None,
         exp_naming: str | Callable[[dict[str, Any], int], str] | None = "run_{step:03d}",
         custom_aliases: Mapping[str, str | list[str]] | None = None,
@@ -58,7 +59,7 @@ class ComsolConverter:
         self.time_param = self.data_schema.get("time", time_param)
         self.title = title
         self.source = source
-        self.attrs = dict(attrs) if attrs else {}
+        self.attributes = dict(attributes or attrs or {})
 
         reserved = {
             "variables",
@@ -67,6 +68,7 @@ class ComsolConverter:
             "source",
             "attr",
             "attrs",
+            "attributes",
             "metadata",
             "root_attrs",
             "root_metadata",
@@ -264,25 +266,37 @@ class ComsolConverter:
                 )
 
         dt = xr.DataTree()
-        root_attrs = {
-            "title": self.title or self.data_schema.get("title", "COMSOL Parametric Simulation Dataset"),
-            "conventions": "CF-1.8",
-            "source": self.source or self.data_schema.get("source", "COMSOL Multiphysics"),
-            **self.data_schema.get("attr", {}),
-            **self.data_schema.get("attrs", {}),
-            **self.data_schema.get("root_attrs", {}),
-            **self.data_schema.get("metadata", {}),
-            **self.attrs,
-        }
-        if "title" in self.data_schema.get("attrs", {}):
-            root_attrs["title"] = self.data_schema["attrs"]["title"]
-        elif "title" in self.data_schema.get("attr", {}):
-            root_attrs["title"] = self.data_schema["attr"]["title"]
+        if not self.is_auto_schema:
+            root_attrs = {
+                "title": self.data_schema.get("title", "COMSOL Parametric Simulation Dataset"),
+                "conventions": "CF-1.8",
+                "source": self.data_schema.get("source", "COMSOL Multiphysics"),
+                **self.data_schema.get("attr", {}),
+                **self.data_schema.get("attrs", {}),
+                **self.data_schema.get("attributes", {}),
+                **self.data_schema.get("root_attrs", {}),
+                **self.data_schema.get("metadata", {}),
+            }
+            if "title" in self.data_schema.get("attrs", {}):
+                root_attrs["title"] = self.data_schema["attrs"]["title"]
+            elif "title" in self.data_schema.get("attr", {}):
+                root_attrs["title"] = self.data_schema["attr"]["title"]
 
-        if "source" in self.data_schema.get("attrs", {}):
-            root_attrs["source"] = self.data_schema["attrs"]["source"]
-        elif "source" in self.data_schema.get("attr", {}):
-            root_attrs["source"] = self.data_schema["attr"]["source"]
+            if "source" in self.data_schema.get("attrs", {}):
+                root_attrs["source"] = self.data_schema["attrs"]["source"]
+            elif "source" in self.data_schema.get("attr", {}):
+                root_attrs["source"] = self.data_schema["attr"]["source"]
+        else:
+            root_attrs = {
+                "title": self.title or "COMSOL Parametric Simulation Dataset",
+                "conventions": "CF-1.8",
+                "source": self.source or "COMSOL Multiphysics",
+                **self.attributes,
+            }
+            if "title" in self.attributes:
+                root_attrs["title"] = self.attributes["title"]
+            if "source" in self.attributes:
+                root_attrs["source"] = self.attributes["source"]
 
         dt.attrs = _sanitize_comsol_attrs(root_attrs)
 

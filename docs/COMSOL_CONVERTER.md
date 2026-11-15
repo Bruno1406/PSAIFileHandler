@@ -34,9 +34,14 @@ When you do not want to write a full `data_schema`, simply pass a list of geomet
 ```python
 from psaifilehandler import ComsolConverter
 
-# 1. Instantiate converter with geometry names
+# 1. Instantiate converter with geometry names and optional root attributes
 converter = ComsolConverter(
     geometries=["pump", "blades", "inlet", "outlet"],
+    attributes={
+        "institution": "TU Darmstadt",
+        "author": "Bruno Machado",
+        "study": "Ultra-Fine MRF Sweep",
+    },
     # Optional: parameters=["Q_in", "rot_rpm"]  # or custom aliases
     # Optional: variables=["pressure", "velocity"]  # selective filter
 )
@@ -54,10 +59,11 @@ converter.to_netcdf4(
 ```
 
 > [!TIP]
+> - `attributes`: A dictionary of top-level global attributes written to the NetCDF-4 root group when `data_schema` is not set.
 > - If `geometries` is omitted or empty, domains default to `["geometry_1", "geometry_2", ...]`.
 > - The length of `geometries` must strictly equal the number of files passed.
 > - `time_param` is **never** auto-discovered: steady-state is the safe default unless `time_param="Time"` is explicitly passed.
-> - If an explicit `data_schema` is supplied, it takes strict priority over shorthand arguments.
+> - If an explicit `data_schema` is supplied, it takes strict priority over shorthand arguments (such as `geometries`, `variables`, `parameters`, `attributes`, and `time_param`).
 
 ---
 
